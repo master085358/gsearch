@@ -14,9 +14,42 @@ from ..github import get_client
 from ..models import GITHUB_SEARCH_RESULT_LIMIT
 from .fetch_files import fetch_files
 
-MAX_CONSECUTIVE_EMPTY = 10
-MAX_SIZE = 384000  # ~375 KB, practical upper bound for SKILL.md files
+MAX_SIZE = 1_000_000  # 1 MB
 DEFAULT_CHUNK_SIZE = 10000
+MAX_CONSECUTIVE_EMPTY = 10
+
+
+def _get_lo(progress: dict) -> int:
+    """Совместимость со старыми схемами БД: last_lo или lastlo."""
+    for key in ("lastlo", "last_lo", "lo"):
+        try:
+            val = progress[key]
+            if val is not None:
+                return int(val)
+        except (KeyError, IndexError):
+            pass
+    return 0
+
+
+def _get_collected(progress: dict) -> int:
+    for key in ("collected",):
+        try:
+            val = progress[key]
+            if val is not None:
+                return int(val)
+        except (KeyError, IndexError):
+            pass
+    return 0
+
+
+def _is_completed(progress: dict) -> bool:
+    for key in ("completedat", "completed_at", "completed"):
+        try:
+            val = progress[key]
+            return bool(val)
+        except (KeyError, IndexError):
+            pass
+    return False
 
 
 def fetch_file_paths(
@@ -34,13 +67,19 @@ def fetch_file_paths(
 
     # ── Resume support ──────────────────────────────────────────────────────
     progress = get_scan_progress(db_path, query)
-    if progress is not None:
-        if progress.get("completed"):
-            print(f"Scan already completed ({progress['collected']:,} files). Skipping.", flush=True)
-            return {"collected": progress["collected"], "total": get_file_count(db_path)}
-        lo = progress["lastlo"]
-        collected = progress["collected"]
-        total = progress["collected"]
+    if progress is not None and _is_completed(progress) and not skip_cache:
+        total = get_file_count(db_path)
+        print(
+            f"Scan already completed ({_get_collected(progress):,} files). "
+            "Use --skip-cache to rescan.",
+            flush=True,
+        )
+        return {"collected": _get_collected(progress), "total": total}
+
+    if progress is not None and _get_lo(progress) > 0 and not skip_cache:
+        lo = _get_lo(progress)
+        collected = _get_collected(progress)
+        total = collected
         print(f"Resuming scan from size:{lo}", flush=True)
     else:
         lo = 0
@@ -61,7 +100,10 @@ def fetch_file_paths(
             print(f"  size:{lo}..{hi} = 0 (skipping)", flush=True)
             consecutive_empty += 1
             if consecutive_empty >= MAX_CONSECUTIVE_EMPTY:
-                print(f"  {consecutive_empty} consecutive empty ranges, stopping", flush=True)
+                print(
+                    f"  {consecutive_empty} consecutive empty ranges, stopping",
+                    flush=True,
+                )
                 break
             lo = hi + 1
             chunk = min(chunk * 2, MAX_SIZE)
