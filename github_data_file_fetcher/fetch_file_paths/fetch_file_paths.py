@@ -1,7 +1,8 @@
+# github_data_file_fetcher/fetch_file_paths/fetch_file_paths.py
+
 from pathlib import Path
 
-from .db import (
-    get_db,
+from ..db import (
     get_file_count,
     get_scan_progress,
     init_db,
@@ -9,18 +10,19 @@ from .db import (
     insert_search_hits,
     update_scan_progress,
 )
-from .github import get_client
-from .fetchfilepaths.fetch_files import fetch_files
+from ..github import get_client
+from ..models import GITHUB_SEARCH_RESULT_LIMIT
+from .fetch_files import fetch_files
 
-GITHUB_SEARCH_RESULT_LIMIT = 1000
 MAX_CONSECUTIVE_EMPTY = 10
 MAX_SIZE = 384000  # ~375 KB, practical upper bound for SKILL.md files
+DEFAULT_CHUNK_SIZE = 10000
 
 
 def fetch_file_paths(
     query: str,
     db_path: Path | None = None,
-    chunk: int = 10000,
+    chunk: int = DEFAULT_CHUNK_SIZE,
     skip_cache: bool = False,
 ) -> dict:
     """
@@ -33,6 +35,9 @@ def fetch_file_paths(
     # ── Resume support ──────────────────────────────────────────────────────
     progress = get_scan_progress(db_path, query)
     if progress is not None:
+        if progress.get("completed"):
+            print(f"Scan already completed ({progress['collected']:,} files). Skipping.", flush=True)
+            return {"collected": progress["collected"], "total": get_file_count(db_path)}
         lo = progress["lastlo"]
         collected = progress["collected"]
         total = progress["collected"]
@@ -97,7 +102,6 @@ def fetch_file_paths(
                     flush=True,
                 )
                 lo = hi + 1
-                # Восстанавливаем chunk, чтобы не застрять на chunk=1 дальше
                 chunk = min(max(chunk * 2, 2), MAX_SIZE)
                 update_scan_progress(db_path, query, lo, MAX_SIZE, collected)
                 continue
