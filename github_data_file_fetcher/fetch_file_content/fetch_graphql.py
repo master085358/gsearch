@@ -15,13 +15,17 @@ DEFAULT_BATCH_SIZE = 50
 
 
 def fetch_file_content_graphql(
-    urls: list[str], content_dir: Path, db_path: Path | None = None,
+    urls: list[str],
+    content_dir: Path,
+    db_path: Path | None = None,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    limit: int | None = None,
 ) -> dict:
     """Fetch content for GitHub URLs using batched GraphQL queries.
 
     URLs should be pre-filtered to only include those needing content.
     Records content status in DB so re-runs skip already-processed files.
+    If limit is given, stops after downloading that many files.
     Falls back to REST for truncated blobs (>100KB).
     Returns dict with counts: fetched, skipped, not_found, errors, truncated, queries.
     """
@@ -61,6 +65,9 @@ def fetch_file_content_graphql(
     if db_path and already_on_disk:
         from ..db import insert_content_status_batch
         insert_content_status_batch(db_path, already_on_disk)
+
+    if limit is not None:
+        pending = pending[:limit]
 
     # Progress display
     done_event = threading.Event()

@@ -67,6 +67,13 @@ def main():
         default=50,
         help="Files per GraphQL query (default: 50, requires --graphql)",
     )
+    content_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Stop after downloading N files (default: no limit)",
+    )
 
     # fetch-repo-metadata subcommand
     meta_parser = subparsers.add_parser(
@@ -199,7 +206,10 @@ def main():
             if args.graphql:
                 from .fetch_file_content import fetch_file_content_graphql
 
-                stats = fetch_file_content_graphql(urls, content_dir, db_path=db_path, batch_size=args.batch_size)
+                stats = fetch_file_content_graphql(
+                    urls, content_dir, db_path=db_path,
+                    batch_size=args.batch_size, limit=args.limit,
+                )
                 print(
                     f"\nDone: {stats['fetched']} fetched, {stats['errors']} errors, "
                     f"{stats['truncated_rest']} REST fallback, {stats['queries']} queries"
@@ -207,7 +217,7 @@ def main():
             else:
                 from .fetch_file_content import fetch_file_content
 
-                stats = fetch_file_content(urls, content_dir, db_path=db_path)
+                stats = fetch_file_content(urls, content_dir, db_path=db_path, limit=args.limit)
                 print(f"\nDone: {stats['fetched']} fetched, {stats['errors']} errors")
     elif args.command == "fetch-repo-metadata":
         db_path = args.db or (args.output_dir / "files.db")

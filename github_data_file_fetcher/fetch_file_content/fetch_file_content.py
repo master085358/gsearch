@@ -34,11 +34,17 @@ def _scan_existing(content_dir: Path) -> set[str]:
     return existing
 
 
-def fetch_file_content(urls: list[str], content_dir: Path, db_path: Path | None = None) -> dict:
+def fetch_file_content(
+    urls: list[str],
+    content_dir: Path,
+    db_path: Path | None = None,
+    limit: int | None = None,
+) -> dict:
     """Fetch content for a list of GitHub URLs.
 
     URLs should be pre-filtered to only include those needing content.
     Records content status in DB so re-runs skip already-processed files.
+    If limit is given, stops after downloading that many files.
     Returns dict with counts: fetched, skipped, not_found, errors.
     """
     content_dir.mkdir(parents=True, exist_ok=True)
@@ -68,6 +74,9 @@ def fetch_file_content(urls: list[str], content_dir: Path, db_path: Path | None 
     if db_path and already_on_disk:
         from ..db import insert_content_status_batch
         insert_content_status_batch(db_path, already_on_disk)
+
+    if limit is not None:
+        pending = pending[:limit]
 
     total = len(urls)
 
