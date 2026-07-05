@@ -14,6 +14,9 @@ github_data_file_fetcher/
   fetch_repo_metadata/     # Repository metadata
   fetch_file_history/      # Commit history
 
+  # Search (project discovery for agents)
+  search/                  # search_repositories + search_code, JSON output
+
   # Shared
   models.py                # Constants and ApiResponse dataclass
   github.py                # PyGithub-based client with caching and rate limiting
@@ -34,7 +37,18 @@ uv run github-fetch fetch-file-content    # Download file content
 uv run github-fetch fetch-repo-metadata   # Get repo metadata
 uv run github-fetch fetch-file-history    # Get commit history
 uv run github-fetch api <endpoint>       # Generic cached API call
+uv run github-fetch search-repos <q>     # Find ready-made projects (ranked by stars)
+uv run github-fetch search-code <q>      # Find repos implementing a pattern
 ```
+
+## Project Discovery (for agents)
+
+`search-repos` / `search-code` help an agent find existing GitHub projects to
+reuse. Both print JSON (or `--table`) and are driven by the
+`find-github-projects` Claude Code skill (`.claude/skills/find-github-projects/`).
+`search-repos` ranks repositories by stars; `search-code` groups code matches by
+repo and enriches them with metadata via the GraphQL batch client. See README
+"Searching for reusable projects" for the full flag list.
 
 ## Generic API (Library + CLI)
 

@@ -182,6 +182,55 @@ def main():
         help="GraphQL query string (requires --graphql)",
     )
 
+    # search-repos subcommand
+    repos_parser = subparsers.add_parser(
+        "search-repos",
+        help="Search repositories (find ready-made projects to reuse)",
+    )
+    repos_parser.add_argument("query", nargs="?", default="", help="Free-text search terms")
+    repos_parser.add_argument("--language", help="Filter by primary language")
+    repos_parser.add_argument(
+        "--topic", action="append", default=[], metavar="TOPIC",
+        help="Require a topic (repeatable)",
+    )
+    repos_parser.add_argument("--min-stars", type=int, help="Minimum star count")
+    repos_parser.add_argument("--pushed-after", metavar="YYYY-MM-DD", help="Pushed on/after date")
+    repos_parser.add_argument("--created-after", metavar="YYYY-MM-DD", help="Created on/after date")
+    repos_parser.add_argument("--license", dest="license_filter", help="SPDX license key, e.g. mit")
+    repos_parser.add_argument("--in", dest="in_fields", metavar="FIELDS",
+                              help="Where to match, e.g. name,description,readme")
+    repos_parser.add_argument("--sort", default="stars",
+                              choices=["stars", "forks", "updated", "help-wanted-issues", "best-match"])
+    repos_parser.add_argument("--order", default="desc", choices=["desc", "asc"])
+    repos_parser.add_argument("--limit", type=int, default=30, help="Max repos to return (<=1000)")
+    repos_parser.add_argument("--include-forks", action="store_true")
+    repos_parser.add_argument("--include-archived", action="store_true")
+    repos_parser.add_argument("--skip-cache", action="store_true")
+    repos_parser.add_argument("--table", action="store_true", help="Human-readable table instead of JSON")
+
+    # search-code subcommand
+    code_parser = subparsers.add_parser(
+        "search-code",
+        help="Search source code and group matches by repository",
+    )
+    code_parser.add_argument("query", help="Search term (required by GitHub code search)")
+    code_parser.add_argument("--language", help="Filter by language")
+    code_parser.add_argument("--filename", help="Match a specific filename")
+    code_parser.add_argument("--extension", help="Match a file extension, e.g. ts")
+    code_parser.add_argument("--path", help="Restrict to a path prefix")
+    code_parser.add_argument("--repo", help="Restrict to owner/name")
+    code_parser.add_argument("--org", help="Restrict to an organization")
+    code_parser.add_argument("--user", help="Restrict to a user")
+    code_parser.add_argument("--in", dest="in_fields", metavar="FIELDS",
+                             help="Where to match, e.g. file,path")
+    code_parser.add_argument("--limit", type=int, default=50, help="Max file matches to collect (<=1000)")
+    code_parser.add_argument("--no-metadata", action="store_true",
+                             help="Skip repo metadata enrichment (faster, no stars)")
+    code_parser.add_argument("--sort", dest="sort_repos_by", default="stars",
+                             choices=["stars", "matches"])
+    code_parser.add_argument("--skip-cache", action="store_true")
+    code_parser.add_argument("--table", action="store_true", help="Human-readable table instead of JSON")
+
     args = parser.parse_args()
 
     if args.command == "fetch-file-paths":
@@ -278,8 +327,85 @@ def main():
             resp = client.api(args.endpoint, params=params or None, method=args.method)
             json.dump(resp.body, sys.stdout, indent=2)
             sys.stdout.write("\n")
+    elif args.command == "search-repos":
+        from .search import search_repositories
+
+        result = search_repositories(
+            args.query,
+            language=args.language,
+            topics=args.topic,
+            min_stars=args.min_stars,
+            pushed_after=args.pushed_after,
+            created_after=args.created_after,
+            license_filter=args.license_filter,
+            in_fields=args.in_fields,
+            sort=args.sort,
+            order=args.order,
+            limit=args.limit,
+            include_forks=args.include_forks,
+            include_archived=args.include_archived,
+            skip_cache=args.skip_cache,
+        )
+        _emit_search(result, args.table)
+    elif args.command == "search-code":
+        from .search import search_code
+
+        result = search_code(
+            args.query,
+            language=args.language,
+            filename=args.filename,
+            extension=args.extension,
+            path=args.path,
+            repo=args.repo,
+            org=args.org,
+            user=args.user,
+            in_fields=args.in_fields,
+            limit=args.limit,
+            with_metadata=not args.no_metadata,
+            sort_repos_by=args.sort_repos_by,
+            skip_cache=args.skip_cache,
+        )
+        _emit_search(result, args.table)
     else:
         parser.print_help()
+
+
+def _emit_search(result: dict, as_table: bool) -> None:
+    """Write a search result to stdout as JSON (default) or a compact table."""
+    import json
+    import sys
+
+    if "error" in result:
+        json.dump(result, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        sys.exit(1)
+
+    if not as_table:
+        json.dump(result, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        return
+
+    if result["kind"] == "repositories":
+        print(f"{result['returned']} of ~{result['total_count']:,} repos for: {result['query']}\n")
+        for r in result["results"]:
+            stars = r["stars"] if r["stars"] is not None else "?"
+            meta = " | ".join(filter(None, [
+                f"★{stars}", r["language"], r["license"], f"pushed {(r['pushed_at'] or '')[:10]}",
+            ]))
+            print(f"{r['full_name']}  ({meta})")
+            if r["description"]:
+                print(f"    {r['description']}")
+            print(f"    {r['url']}")
+        return
+
+    print(f"{result['returned_repos']} repos, {result['returned_files']} files for: {result['query']}\n")
+    for r in result["repos"]:
+        stars = r.get("stars", "?")
+        print(f"{r['full_name']}  (★{stars} | {r['match_count']} match(es) | {r.get('language') or '?'})")
+        if r.get("description"):
+            print(f"    {r['description']}")
+        for m in r["matches"][:5]:
+            print(f"    - {m['path']}")
 
 
 if __name__ == "__main__":

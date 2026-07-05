@@ -100,6 +100,56 @@ uv run github-fetch fetch-file-history --graphql --batch-size 5 --db /path/to/db
 
 **Output**: `results/file_history.json`
 
+## Searching for reusable projects
+
+Two search commands turn a reuse goal ("find me a project/library that does X")
+into ranked, metadata-rich results. They are built on the same cached, throttled,
+rate-limited clients and print JSON to stdout so an agent can consume them
+directly. A Claude Code skill (`.claude/skills/find-github-projects/`) drives them.
+
+### `search-repos`
+
+Search repositories, ranked by stars by default -- the primary tool for finding
+ready-made projects.
+
+```bash
+uv run github-fetch search-repos "pdf table extraction" --language python --min-stars 500
+uv run github-fetch search-repos "" --topic llm-agent --topic rag --pushed-after 2025-01-01
+uv run github-fetch search-repos "vector database" --language rust --table   # human view
+```
+
+Flags: `--language`, `--topic` (repeatable), `--min-stars`, `--pushed-after`,
+`--created-after`, `--license`, `--in name,description,readme`,
+`--sort stars|forks|updated|best-match`, `--order`, `--limit`, `--include-forks`,
+`--include-archived`, `--table`, `--skip-cache`.
+
+Each result carries `full_name`, `url`, `description`, `stars`, `forks`,
+`language`, `topics`, `license`, `pushed_at`, `archived`, `is_fork`, and more.
+
+### `search-code`
+
+Search source code and group matches by repository, enriched with repo metadata
+(stars, topics, license) so results can still be ranked. Use this to find repos
+that already implement a specific pattern.
+
+```bash
+uv run github-fetch search-code "createParallelTransform" --language typescript
+uv run github-fetch search-code "SKILL.md" --filename SKILL.md --limit 100 --table
+```
+
+Flags: `--language`, `--filename`, `--extension`, `--path`, `--repo owner/name`,
+`--org`, `--user`, `--in file,path`, `--limit`, `--no-metadata`,
+`--sort stars|matches`, `--table`, `--skip-cache`.
+
+### Python SDK
+
+```python
+from github_data_file_fetcher import search_repositories, search_code
+
+repos = search_repositories("kubernetes operator", language="go", min_stars=1000, limit=20)
+code = search_code("SKILL.md", filename="SKILL.md", limit=100)
+```
+
 ## Generic API
 
 In addition to the pipeline commands, the project exposes a generic cached GitHub API client. This is useful for ad-hoc queries and as a library dependency for other projects that need cached GitHub API access without building their own caching infrastructure.

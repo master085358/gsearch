@@ -7,8 +7,9 @@ around GitHub's 1000-result search limit.
 from .cli import main
 from .generic_client import get_generic_client
 from .models import ApiResponse
+from .search import search_code, search_repositories
 
-__all__ = ["main", "get_generic_client", "ApiResponse"]
+__all__ = ["main", "get_generic_client", "ApiResponse", "search_repositories", "search_code"]
 
 if __name__ == "__main__":
     main()
