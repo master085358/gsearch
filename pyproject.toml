@@ -35,6 +35,8 @@ notebooks = [
 
 [project.scripts]
 github-fetch = "github_data_file_fetcher:main"
+search = "github_data_file_fetcher.search.cli:main"
+gsearch = "github_data_file_fetcher.search.cli:main"
 
 [build-system]
 requires = ["hatchling"]

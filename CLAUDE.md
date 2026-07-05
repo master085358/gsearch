@@ -44,11 +44,27 @@ uv run github-fetch search-code <q>      # Find repos implementing a pattern
 ## Project Discovery (for agents)
 
 `search-repos` / `search-code` help an agent find existing GitHub projects to
-reuse. Both print JSON (or `--table`) and are driven by the
-`find-github-projects` Claude Code skill (`.claude/skills/find-github-projects/`).
-`search-repos` ranks repositories by stars; `search-code` groups code matches by
-repo and enriches them with metadata via the GraphQL batch client. See README
-"Searching for reusable projects" for the full flag list.
+reuse. Both print JSON (or `--table`). `search-repos` ranks repositories by stars;
+`search-code` groups code matches by repo and enriches them with metadata via the
+GraphQL batch client.
+
+Agents run it **zero-install via `uvx`** (no clone, no install) through the short
+`search` entry point:
+
+```bash
+set -a; source .env; set +a; uvx --from git+https://github.com/master085358/gsearch \
+  search repos "<terms>" --language <lang> --min-stars 200
+set -a; source .env; set +a; uvx --from git+https://github.com/master085358/gsearch \
+  search code "<terms>" --language <lang>
+```
+
+`search repos`/`search code` are equivalent to `github-fetch search-repos`/`search-code`.
+Load `GITHUB_TOKEN` from `.env` inline (a fresh shell keeps no exports between calls).
+
+This is packaged as the `find-github-projects` skill (both
+`.claude/skills/` and `.opencode/skills/`), the opencode `/find-github-projects`
+command (`.opencode/command/`), and `AGENTS.md`. See README "Searching for reusable
+projects" for the full flag list and the `/find-github-projects` usage.
 
 ## Generic API (Library + CLI)
 

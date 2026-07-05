@@ -105,7 +105,35 @@ uv run github-fetch fetch-file-history --graphql --batch-size 5 --db /path/to/db
 Two search commands turn a reuse goal ("find me a project/library that does X")
 into ranked, metadata-rich results. They are built on the same cached, throttled,
 rate-limited clients and print JSON to stdout so an agent can consume them
-directly. A Claude Code skill (`.claude/skills/find-github-projects/`) drives them.
+directly. A Claude Code / opencode skill (`find-github-projects`) drives them.
+
+### Zero-install via `uvx` (recommended for agents)
+
+You don't have to clone or install this project. `uvx` builds and runs it straight
+from git, exposing a short `search` command with `repos` / `code` subcommands:
+
+```bash
+# ready-made projects, ranked by stars
+uvx --from git+https://github.com/master085358/gsearch \
+  search repos "pdf table extraction" --language python --min-stars 200
+
+# repos implementing a specific pattern
+uvx --from git+https://github.com/master085358/gsearch \
+  search code "createParallelTransform" --language typescript
+```
+
+The token comes from `GITHUB_TOKEN`. Load it from a `.env` first (do it inline —
+a fresh shell doesn't keep exports between commands):
+
+```bash
+set -a; source .env; set +a; uvx --from git+https://github.com/master085358/gsearch \
+  search repos "vector database" --language rust --table
+```
+
+The same package also ships the full `github-fetch` command over `uvx`
+(`uvx --from git+https://github.com/master085358/gsearch github-fetch ...`). The
+sections below use the local `uv run github-fetch search-repos/search-code` form,
+which is equivalent to `search repos` / `search code`.
 
 ### `search-repos`
 
@@ -149,6 +177,47 @@ from github_data_file_fetcher import search_repositories, search_code
 repos = search_repositories("kubernetes operator", language="go", min_stars=1000, limit=20)
 code = search_code("SKILL.md", filename="SKILL.md", limit=100)
 ```
+
+### The `/find-github-projects` agent command
+
+Instead of running the CLI yourself, let the agent do the whole loop — pick the
+right mode, build and narrow queries, judge candidates, read the top READMEs, and
+hand back a ranked shortlist. This is packaged as a command/skill for both
+Claude Code and opencode.
+
+**One-time setup.** Put your token in a `.env` file in the directory you'll work
+from (it must define `GITHUB_TOKEN=ghp_...`). Everything else runs zero-install
+via `uvx` — nothing to clone or install.
+
+**Use it — just type the command with your goal in natural language:**
+
+```
+/find-github-projects a python library to extract tables from scanned PDFs, MIT license
+/find-github-projects готовый MCP-сервер для работы с Postgres на TypeScript
+/find-github-projects who already implemented a rate-limited GitHub GraphQL batch client
+```
+
+- **Claude Code**: the `find-github-projects` skill auto-triggers on such requests,
+  or invoke it explicitly with `/find-github-projects <goal>`. Definition:
+  `.claude/skills/find-github-projects/SKILL.md`.
+- **opencode**: type `/find-github-projects <goal>`. Definition:
+  `.opencode/command/find-github-projects.md` (plus the mirrored skill in
+  `.opencode/skills/` and the always-on note in `AGENTS.md`).
+
+**What it does with your goal:**
+
+1. Clarifies the goal if it's too vague (one question, max).
+2. Chooses `search repos` (a whole project to adopt) vs `search code` (a specific
+   implementation), running both when useful.
+3. Runs the cached `uvx ... search ...` command, narrowing with `--language`,
+   `--topic`, `--min-stars`, `--pushed-after`, `--license`.
+4. Judges candidates by stars, freshness (`pushed_at`), `archived`, license, and
+   description; reads the README of the top few.
+5. Returns a ranked shortlist — name + link, what it is, why it fits, stars /
+   language / license / last-pushed, caveats — and a concrete next step, in your
+   language.
+
+If a run reports `401`/`403`, the `.env`/`GITHUB_TOKEN` is missing or invalid.
 
 ## Generic API
 
